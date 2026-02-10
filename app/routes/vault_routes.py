@@ -1,6 +1,6 @@
 from flask import Blueprint
 from app.middleware.auth_middleware import verify_firebase_token
-from app.controllers.vault_controller import add_password, get_passwords, delete_password
+from app.controllers.vault_controller import add_password, get_passwords, delete_password, get_password
 
 vault_bp = Blueprint('vault', __name__)
 
@@ -13,6 +13,11 @@ def add():
 @verify_firebase_token
 def list_all():
     return get_passwords()
+
+@vault_bp.route('/<entry_id>', methods=['GET'])
+@verify_firebase_token
+def get_one(entry_id):
+    return get_password(entry_id)
 
 @vault_bp.route('/<entry_id>', methods=['DELETE'])
 @verify_firebase_token

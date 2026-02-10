@@ -51,6 +51,34 @@ def add_password():
     
     return jsonify({'id': doc_id, 'message': 'Password stored successfully'}), 201
 
+def get_password(entry_id):
+    uid = request.uid
+    token = request.token
+    
+    url = f"{get_firestore_base_url()}/users/{uid}/vault/{entry_id}"
+    headers = {"Authorization": f"Bearer {token}"}
+    
+    response = requests.get(url, headers=headers)
+    
+    if response.status_code == 404:
+        return jsonify({'error': 'Password entry not found'}), 404
+        
+    if response.status_code != 200:
+        return jsonify({'error': 'Firestore Error', 'details': response.text}), response.status_code
+        
+    doc = response.json()
+    fields = doc.get('fields', {})
+    
+    item = {
+        'id': doc['name'].split('/')[-1],
+        'site': fields.get('site', {}).get('stringValue', ''),
+        'username': fields.get('username', {}).get('stringValue', ''),
+        'encryptedPassword': fields.get('encryptedPassword', {}).get('stringValue', ''),
+        'iv': fields.get('iv', {}).get('stringValue', ''),
+    }
+            
+    return jsonify(item), 200
+
 def get_passwords():
     uid = request.uid
     token = request.token
