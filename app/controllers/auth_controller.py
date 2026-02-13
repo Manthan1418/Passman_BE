@@ -30,7 +30,7 @@ def generate_2fa_secret():
     # Issuer = PassMan, User = current user's email (we'd need to fetch it, but for now generic is ok or we can pass it)
     # Let's try to get email from request if available, otherwise just use "User"
     email = request.args.get('email', 'User')
-    uri = pyotp.totp.TOTP(secret).provisioning_uri(name=email, issuer_name="PassMan")
+    uri = pyotp.totp.TOTP(secret).provisioning_uri(name=email, issuer_name="Cipherlock")
     
     return jsonify({
         "secret": secret,

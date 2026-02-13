@@ -26,7 +26,7 @@ from app.extensions.firestore import FirestoreClient, store_challenge, get_chall
 
 # Configuration
 RP_ID = "localhost"  # Can be configured via env vars
-RP_NAME = "PassMan Vault"
+RP_NAME = "Cipherlock Vault"
 ORIGIN = "http://localhost:5173" # Frontend URL
 
 class WebAuthnService:
