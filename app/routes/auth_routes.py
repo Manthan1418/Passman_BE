@@ -28,3 +28,25 @@ def verify():
 @verify_firebase_token
 def status():
     return get_2fa_status()
+
+@auth_bp.route('/webauthn/register/options', methods=['POST'])
+@verify_firebase_token
+def webauthn_reg_options():
+    from app.controllers.auth_controller import webauthn_register_options
+    return webauthn_register_options()
+
+@auth_bp.route('/webauthn/register/verify', methods=['POST'])
+@verify_firebase_token
+def webauthn_reg_verify():
+    from app.controllers.auth_controller import webauthn_register_verify
+    return webauthn_register_verify()
+
+@auth_bp.route('/webauthn/login/options', methods=['POST'])
+def webauthn_log_options():
+    from app.controllers.auth_controller import webauthn_login_options
+    return webauthn_login_options()
+
+@auth_bp.route('/webauthn/login/verify', methods=['POST'])
+def webauthn_log_verify():
+    from app.controllers.auth_controller import webauthn_login_verify
+    return webauthn_login_verify()

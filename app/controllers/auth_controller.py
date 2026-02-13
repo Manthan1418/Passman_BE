@@ -140,3 +140,87 @@ def get_2fa_status():
     enabled = fields.get('twoFactorEnabled', {}).get('booleanValue', False)
     
     return jsonify({'enabled': enabled}), 200
+
+# ==========================================
+# WEBAUTHN CONTROLLER METHODS
+# ==========================================
+
+from app.services.webauthn_service import WebAuthnService
+
+def webauthn_register_options():
+    try:
+        uid = request.uid
+        # Fallback if email is missing (e.g. phone auth)
+        email = getattr(request, 'email', None) or f"user-{uid[:8]}@passman.local"
+        
+        options = WebAuthnService.generate_registration_options(uid, email)
+        return current_app.response_class(options, mimetype='application/json'), 200
+    except Exception as e:
+        import sys
+        print(f"DEBUG ERROR: {str(e)}", file=sys.stderr)
+        current_app.logger.error(f"WebAuthn Options Error: {str(e)}")
+        return jsonify({'error': str(e)}), 400
+
+def webauthn_register_verify():
+    uid = request.uid
+    token = request.token
+    data = request.json
+    
+    try:
+        import sys
+        print(f"DEBUG: Verifying WebAuthn Registration for uid={uid}", file=sys.stderr)
+        result = WebAuthnService.verify_registration_response(uid, data, token)
+        return jsonify(result), 200
+    except Exception as e:
+        import sys
+        print(f"DEBUG ERROR in webauthn_register_verify: {str(e)}", file=sys.stderr)
+        import traceback
+        traceback.print_exc(file=sys.stderr)
+        current_app.logger.error(f"WebAuthn Reg Error: {str(e)}")
+        return jsonify({'error': str(e)}), 400
+
+def webauthn_login_options():
+    try:
+        data = request.json or {}
+        email = data.get('email')
+        uid = None
+        
+        if getattr(request, 'uid', None):
+            uid = request.uid
+        elif data.get('uid'):
+            uid = data.get('uid')
+        
+        options = WebAuthnService.generate_login_options(uid)
+        return current_app.response_class(options, mimetype='application/json'), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 400
+
+def webauthn_login_verify():
+    try:
+        data = request.json
+        uid = data.get('uid')
+        
+        if not uid:
+            return jsonify({'error': 'UID is required for verification'}), 400
+
+        # Remove 'uid' from data so it doesn't confuse WebAuthn parser if it's strict
+        data_for_service = data.copy()
+        if 'uid' in data_for_service:
+            del data_for_service['uid']
+
+        result = WebAuthnService.verify_login_response(uid, data_for_service)
+        
+        from firebase_admin import auth
+        custom_token = auth.create_custom_token(uid)
+        
+        return jsonify({
+            'verified': True,
+            'token': custom_token.decode('utf-8') if isinstance(custom_token, bytes) else custom_token,
+             'sign_count': result.get('new_sign_count')
+        }), 200
+        
+    except Exception as e:
+        import sys
+        print(f"DEBUG ERROR in webauthn_login_verify: {str(e)}", file=sys.stderr)
+        current_app.logger.error(f"WebAuthn Login Error: {str(e)}")
+        return jsonify({'error': str(e)}), 400

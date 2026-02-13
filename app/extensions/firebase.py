@@ -1,12 +1,27 @@
 import requests
 from flask import current_app
+import firebase_admin
+from firebase_admin import credentials
 
 # We no longer use firebase_admin here because of the private key issues on the user's machine.
 # Instead, we will helpers to interact with the REST APIs.
 
 def init_firebase(app):
-    # No initialization needed for REST API approaches that don't use the Admin SDK instance.
-    pass
+    try:
+        if not firebase_admin._apps:
+            # Construct certificate dict
+            cert = {
+                "type": "service_account",
+                "project_id": app.config['FIREBASE_PROJECT_ID'],
+                "private_key": app.config['FIREBASE_PRIVATE_KEY'].replace('\\n', '\n'),
+                "client_email": app.config['FIREBASE_CLIENT_EMAIL'],
+                "token_uri": "https://oauth2.googleapis.com/token",
+            }
+            cred = credentials.Certificate(cert)
+            firebase_admin.initialize_app(cred)
+            print("Firebase Admin SDK Initialized Successfully")
+    except Exception as e:
+        print(f"Failed to initialize Firebase Admin SDK: {e}")
 
 def get_google_auth_url():
     api_key = current_app.config['FIREBASE_API_KEY']

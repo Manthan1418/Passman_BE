@@ -28,6 +28,7 @@ def verify_firebase_token(f):
                  
             user_data = data['users'][0]
             request.uid = user_data['localId']
+            request.email = user_data.get('email')
             request.token = token # Store token to forward to Firestore
             
         except Exception as e:
