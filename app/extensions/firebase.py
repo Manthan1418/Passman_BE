@@ -12,12 +12,15 @@ INIT_ERROR = None
 def init_firebase(app):
     global INIT_ERROR
     try:
-        if not firebase_admin._apps:
-            # Construct certificate dict
+            # Clean up the private key
+            raw_key = app.config['FIREBASE_PRIVATE_KEY']
+            # Handle Vercel's double escaping, newlines, and potential wrapping quotes (single or double)
+            private_key = raw_key.replace('\\n', '\n').replace('\\\\n', '\n').strip('"').strip("'")
+            
             cert = {
                 "type": "service_account",
                 "project_id": app.config['FIREBASE_PROJECT_ID'],
-                "private_key": app.config['FIREBASE_PRIVATE_KEY'].replace('\\n', '\n').replace('\\\\n', '\n').strip('"'),
+                "private_key": private_key,
                 "client_email": app.config['FIREBASE_CLIENT_EMAIL'],
                 "token_uri": "https://oauth2.googleapis.com/token",
             }
@@ -26,7 +29,8 @@ def init_firebase(app):
             print("Firebase Admin SDK Initialized Successfully")
     except Exception as e:
         import traceback
-        INIT_ERROR = f"{str(e)}\n{traceback.format_exc()}"
+        key_preview = app.config.get('FIREBASE_PRIVATE_KEY', '')[:30] if app.config.get('FIREBASE_PRIVATE_KEY') else 'None'
+        INIT_ERROR = f"Error: {str(e)}\nKey Preview: {key_preview}...\nTrace:\n{traceback.format_exc()}"
         print(f"Failed to initialize Firebase Admin SDK: {e}")
 
 def get_google_auth_url():
