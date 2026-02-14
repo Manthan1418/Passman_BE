@@ -13,6 +13,8 @@ class Config:
     FIREBASE_API_KEY = os.environ.get('FIREBASE_API_KEY')
     
     # WebAuthn Configuration
-    RP_ID = os.environ.get('RP_ID') or 'localhost'
+    # WebAuthn Configuration
+    # Ensure RP_ID is just the domain, no protocol
+    RP_ID = (os.environ.get('RP_ID') or 'localhost').replace('https://', '').replace('http://', '').split('/')[0]
     RP_NAME = os.environ.get('RP_NAME') or 'Cipherlock Vault'
     ORIGIN = os.environ.get('ORIGIN') or 'http://localhost:5173'
