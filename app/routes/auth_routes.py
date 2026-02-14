@@ -67,7 +67,18 @@ def firebase_status():
              }), 500
              
         db = firestore.client()
-        return jsonify({'status': 'Firebase Admin SDK initialized successfully'}), 200
+        
+        # Check WebAuthn Config too
+        from flask import current_app
+        config_status = {
+            "status": "Firebase Admin SDK initialized successfully",
+            "webauthn_config": {
+                "RP_ID": current_app.config.get('RP_ID'),
+                "RP_NAME": current_app.config.get('RP_NAME'),
+                "ORIGIN": current_app.config.get('ORIGIN')
+            }
+        }
+        return jsonify(config_status), 200
     except Exception as e:
         import traceback
         return jsonify({'status': 'Failed', 'error': str(e), 'trace': traceback.format_exc()}), 500

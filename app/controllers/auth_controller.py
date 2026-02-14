@@ -157,9 +157,12 @@ def webauthn_register_options():
         return current_app.response_class(options, mimetype='application/json'), 200
     except Exception as e:
         import sys
+        import traceback
+        traceback.print_exc()
         print(f"DEBUG ERROR: {str(e)}", file=sys.stderr)
         current_app.logger.error(f"WebAuthn Options Error: {str(e)}")
-        return jsonify({'error': str(e)}), 400
+        # Return 500 so we know it crashed, not just bad request
+        return jsonify({'error': str(e), 'trace': traceback.format_exc()}), 500
 
 def webauthn_register_verify():
     uid = request.uid
@@ -173,11 +176,11 @@ def webauthn_register_verify():
         return jsonify(result), 200
     except Exception as e:
         import sys
-        print(f"DEBUG ERROR in webauthn_register_verify: {str(e)}", file=sys.stderr)
         import traceback
         traceback.print_exc(file=sys.stderr)
+        print(f"DEBUG ERROR in webauthn_register_verify: {str(e)}", file=sys.stderr)
         current_app.logger.error(f"WebAuthn Reg Error: {str(e)}")
-        return jsonify({'error': str(e)}), 400
+        return jsonify({'error': str(e), 'trace': traceback.format_exc()}), 500
 
 def webauthn_login_options():
     try:
@@ -221,6 +224,8 @@ def webauthn_login_verify():
         
     except Exception as e:
         import sys
+        import traceback
+        traceback.print_exc()
         print(f"DEBUG ERROR in webauthn_login_verify: {str(e)}", file=sys.stderr)
         current_app.logger.error(f"WebAuthn Login Error: {str(e)}")
-        return jsonify({'error': str(e)}), 400
+        return jsonify({'error': str(e), 'trace': traceback.format_exc()}), 500

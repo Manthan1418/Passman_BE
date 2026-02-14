@@ -66,17 +66,34 @@ except ImportError:
     firestore = None
 from datetime import datetime, timezone
 
+# In-Memory Fallback Store
+CHALLENGE_STORE = {}
+
 def store_challenge(user_id, challenge, type):
     try:
-        db = firestore.client()
-        # Expires in 10 minutes
-        # We store in a separate collection 'webauthn_challenges'
-        # Doc ID is user_id. This effectively limits user to 1 active challenge at a time (good for security/preventing spam)
-        db.collection('webauthn_challenges').document(user_id).set({
+        if firestore:
+            try:
+                db = firestore.client()
+                # Expires in 10 minutes
+                # We store in a separate collection 'webauthn_challenges'
+                # Doc ID is user_id. This effectively limits user to 1 active challenge at a time (good for security/preventing spam)
+                db.collection('webauthn_challenges').document(user_id).set({
+                    'challenge': challenge,
+                    'type': type,
+                    'timestamp': firestore.SERVER_TIMESTAMP
+                })
+                return # Success
+            except Exception as e:
+                print(f"Firestore write failed ({e}), falling back to in-memory store.")
+        
+        # Fallback
+        CHALLENGE_STORE[user_id] = {
             'challenge': challenge,
             'type': type,
-            'timestamp': firestore.SERVER_TIMESTAMP
-        })
+            'timestamp': datetime.now(timezone.utc)
+        }
+        print(f"Stored challenge for {user_id} in memory.")
+
     except Exception as e:
         print(f"Error storing challenge: {e}")
         # Fallback to in-memory if Firestore fails (e.g. locally without creds)? 
@@ -85,25 +102,42 @@ def store_challenge(user_id, challenge, type):
 
 def get_challenge(user_id):
     try:
-        db = firestore.client()
-        doc_ref = db.collection('webauthn_challenges').document(user_id)
-        doc = doc_ref.get()
-        
-        if doc.exists:
-            data = doc.to_dict()
-            # Delete after retrieval to prevent replay
-            doc_ref.delete()
-            
-            # Check expiration (5 minutes)
+        # 1. Try Firestore
+        if firestore:
+            try:
+                db = firestore.client()
+                doc_ref = db.collection('webauthn_challenges').document(user_id)
+                doc = doc_ref.get()
+                
+                if doc.exists:
+                    data = doc.to_dict()
+                    # Delete after retrieval to prevent replay
+                    doc_ref.delete()
+                    
+                    # Check expiration (5 minutes)
+                    timestamp = data.get('timestamp')
+                    if timestamp:
+                        # Firestore timestamp is datetime with tzinfo
+                        now = datetime.now(timezone.utc)
+                        if (now - timestamp).total_seconds() > 300:
+                            print("Challenge expired")
+                            return None
+                    
+                    return data
+            except Exception as e:
+                 print(f"Firestore read failed ({e}), checking in-memory store.")
+
+        # 2. Try In-Memory
+        if user_id in CHALLENGE_STORE:
+            data = CHALLENGE_STORE.pop(user_id)
             timestamp = data.get('timestamp')
             if timestamp:
-                # Firestore timestamp is datetime with tzinfo
                 now = datetime.now(timezone.utc)
                 if (now - timestamp).total_seconds() > 300:
-                    print("Challenge expired")
+                    print("InMemory Challenge expired")
                     return None
-            
             return data
+            
         return None
     except Exception as e:
         print(f"Error retrieving challenge: {e}")
