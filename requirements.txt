@@ -8,3 +8,4 @@ qrcode==7.4.2
 pyotp==2.9.0
 webauthn==2.0.0
 marshmallow==3.19.0
+firebase-admin==6.4.0
