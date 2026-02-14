@@ -68,10 +68,21 @@ def firebase_status():
              
         db = firestore.client()
         
+        # TEST DB CONNECTION
+        db_status = "Connected"
+        try:
+            test_ref = db.collection('system_checks').document('connection_test')
+            test_ref.set({'last_check': firestore.SERVER_TIMESTAMP})
+            test_ref.get()
+            db_status = "Read/Write Successful"
+        except Exception as db_e:
+            db_status = f"Read/Write Failed: {str(db_e)}"
+
         # Check WebAuthn Config too
         from flask import current_app
         config_status = {
             "status": "Firebase Admin SDK initialized successfully",
+            "firestore_io": db_status,
             "webauthn_config": {
                 "RP_ID": current_app.config.get('RP_ID'),
                 "RP_NAME": current_app.config.get('RP_NAME'),
