@@ -50,3 +50,19 @@ def webauthn_log_options():
 def webauthn_log_verify():
     from app.controllers.auth_controller import webauthn_login_verify
     return webauthn_login_verify()
+
+@auth_bp.route('/firebase-status', methods=['GET'])
+def firebase_status():
+    from flask import jsonify
+    try:
+        from firebase_admin import firestore
+        import firebase_admin
+        
+        if not firebase_admin._apps:
+             return jsonify({'status': 'Failed', 'error': 'Firebase App not initialized'}), 500
+             
+        db = firestore.client()
+        return jsonify({'status': 'Firebase Admin SDK initialized successfully'}), 200
+    except Exception as e:
+        import traceback
+        return jsonify({'status': 'Failed', 'error': str(e), 'trace': traceback.format_exc()}), 500
