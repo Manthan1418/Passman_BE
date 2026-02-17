@@ -50,7 +50,8 @@ def enable_2fa():
         
     # Verify the code against the secret BEFORE saving
     totp = pyotp.TOTP(secret)
-    if not totp.verify(code):
+    # Allow 1 step window (30s) for time drift
+    if not totp.verify(code, valid_window=1):
         return jsonify({'error': 'Invalid 2FA code'}), 400
         
     # Save to Firestore
@@ -117,7 +118,8 @@ def verify_2fa_login():
         return jsonify({'error': '2FA is enabled but no secret found'}), 500
         
     totp = pyotp.TOTP(secret)
-    if not totp.verify(code):
+    # Allow 1 step window (30s) for time drift
+    if not totp.verify(code, valid_window=1):
         return jsonify({'error': 'Invalid 2FA code'}), 401
         
     return jsonify({'message': 'verified'}), 200
