@@ -13,11 +13,14 @@ def create_app(config_class=Config):
     app.config.from_object(config_class)
 
     # Initialize Extensions
-    CORS(app) # Enable CORS for all routes
+    # CRITICAL: Firebase must be initialized early for FirestoreClient to work
     init_firebase(app)
 
     # Security Extensions
-    # Rate Limiting: 200 requests per day, 50 per hour by default
+    # Enable CORS for the specific frontend origin
+    CORS(app, resources={r"/api/*": {"origins": app.config['ORIGIN']}}, supports_credentials=True)
+
+    # Rate Limiting
     Limiter(
         get_remote_address,
         app=app,
@@ -25,8 +28,10 @@ def create_app(config_class=Config):
         storage_uri="memory://"
     )
 
-    # HTTP Security Headers (Force HTTPS is FALSE for local dev)
-    Talisman(app, content_security_policy=None, force_https=False)
+    # HTTP Security Headers
+    # Force HTTPS in production (when not debugging)
+    force_https = not app.debug
+    Talisman(app, content_security_policy=None, force_https=force_https)
 
     # Register Blueprints
     app.register_blueprint(vault_bp, url_prefix='/api/vault')

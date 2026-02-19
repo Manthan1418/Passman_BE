@@ -28,14 +28,15 @@ from app.extensions.firestore import FirestoreClient, store_challenge, get_chall
 class WebAuthnService:
     @staticmethod
     def _get_config():
-        # Dynamic origin handling for Vercel Previews
-        origin = request.headers.get('Origin') or current_app.config['ORIGIN']
+        # Dynamic origin handling for Vercel/Render
+        # We trust the Host/Origin header if it matches our deployment domain patterns
+        origin = request.headers.get('Origin')
         rp_id = current_app.config['RP_ID']
         
-        # If we are on Vercel (or just want dynamic handling) and origin matches,
-        # we can trust the origin's hostname as the RP_ID.
-        # This fixes credentials being bound to specific deployment URLs vs production URLs.
-        if origin and 'vercel.app' in origin:
+        # If config is localhost but request is from Vercel/Render, we might have a mismatch if not configured via ENV.
+        # But per requirements, we expect ENV to be set. 
+        # Fallback: If origin includes vercel.app, trust it as RP_ID to support preview deployments
+        if origin and ('vercel.app' in origin or 'onrender.com' in origin):
              try:
                  from urllib.parse import urlparse
                  hostname = urlparse(origin).hostname
@@ -47,20 +48,17 @@ class WebAuthnService:
         return {
             'rp_id': rp_id,
             'rp_name': current_app.config['RP_NAME'],
-            'origin': origin
+            'origin': origin or current_app.config['ORIGIN']
         }
 
     @staticmethod
     def generate_registration_options(user_id, user_email):
-        """
-        Generate options for creating a new credential
-        """
         config = WebAuthnService._get_config()
         
         options = generate_registration_options(
             rp_id=config['rp_id'],
             rp_name=config['rp_name'],
-            user_id=user_id.encode('utf-8'), # User ID must be bytes
+            user_id=user_id.encode('utf-8'),
             user_name=user_email,
             user_display_name=user_email,
             attestation=AttestationConveyancePreference.NONE,
@@ -71,21 +69,14 @@ class WebAuthnService:
             ),
         )
         
-        # Store challenge in memory (since we don't have easy DB access for temp data)
         store_challenge(user_id, bytes_to_base64url(options.challenge), 'registration')
-        
         return options_to_json(options)
 
     @staticmethod
     def verify_registration_response(user_id, response_body, token):
-        """
-        Verify the response from the authenticator
-        """
         config = WebAuthnService._get_config()
         
-        # Retrieve challenge
         challenge_data = get_challenge(user_id)
-        
         if not challenge_data or challenge_data['type'] != 'registration':
             raise ValueError("Challenge not found or expired")
             
@@ -102,45 +93,17 @@ class WebAuthnService:
                 require_user_verification=True,
             )
             
-            # Save credential to user's profile using REST API
-            # We need to construct the update payload carefully for Firestore REST
-            # OR we can assume `auth_controller` handles the DB write?
-            # Better to do it here to keep logic encapsulated, but we need the TOKEN.
-            
             cred_id = bytes_to_base64url(verification.credential_id)
             new_cred = {
                  "id": cred_id,
                  "public_key": bytes_to_base64url(verification.credential_public_key),
                  "sign_count": verification.sign_count,
-                 "transports": credential.response.transports or []
+                 "transports": credential.response.transports or [],
+                 "created_at": str(datetime.now(timezone.utc))
             }
             
-            # Firestore Maps are tricky via REST JSON. 
-            # Ideally we fetch existing, append, and patch.
-            
-            # 1. Fetch User (Optional: Parent doc might not exist, but we can still write to subcollection)
-            # user_data = FirestoreClient.get_doc('users', user_id, token)
-            # if not user_data:
-            #      # Option: Create user doc if missing? 
-            #      # For now, we allow "shell" parents for subcollections.
-            #      pass
-            
-            # 2. Update credentials field
-            # We will write to a subcollection `credentials`
-            
-            cred_doc = {
-                "fields": {
-                    "id": {"stringValue": new_cred['id']},
-                    "public_key": {"stringValue": new_cred['public_key']},
-                    "sign_count": {"integerValue": new_cred['sign_count']},
-                    # transports is list
-                }
-            }
-            
-            # We use `update_doc` which performs a PATCH. 
-            # If we point to `users/{uid}/webauthn_credentials/{cred_id}`, it creates/updates that doc.
-            
-            FirestoreClient.update_doc(f"users/{user_id}/webauthn_credentials", cred_id, cred_doc, token)
+            # Store credential in subcollection
+            FirestoreClient.update_doc(f"users/{user_id}/webauthn_credentials", cred_id, new_cred)
             
             return {
                 'verified': True,
@@ -153,19 +116,17 @@ class WebAuthnService:
     @staticmethod
     def generate_login_options(user_id=None):
         config = WebAuthnService._get_config()
-        allow_credentials = None
-        # IF we have user_id, we should try to fetch credentials.
-        # But we don't have a token to read `users/{uid}/credentials`.
-        # So we continue with empty allow_credentials (Usernameless / Resident Key).
+        
+        # If user_id provided, we COULD look up their credentials to provide allowCredentials.
+        # But for simplicity/speed, we often use empty allowCredentials (usernameless flow support) 
+        # or rely on client to select.
         
         options = generate_authentication_options(
             rp_id=config['rp_id'],
-            allow_credentials=allow_credentials,
+            allow_credentials=None,
             user_verification=UserVerificationRequirement.PREFERRED,
         )
         
-        # Store challenge (use user_id if available, else we need a session ID)
-        # For this MVP, we rely on user_id being resolved from email in controller
         if user_id:
              store_challenge(user_id, bytes_to_base64url(options.challenge), 'login')
         
@@ -178,7 +139,7 @@ class WebAuthnService:
         # 1. Get Challenge
         challenge_data = get_challenge(user_id)
         if not challenge_data or challenge_data['type'] != 'login':
-             raise ValueError("Challenge not found")
+             raise ValueError("Challenge not found or expired")
         
         expected_challenge = base64url_to_bytes(challenge_data['challenge'])
         
@@ -188,18 +149,34 @@ class WebAuthnService:
         except Exception as e:
             raise ValueError(f"Failed to parse credential: {str(e)}")
 
-        # 3. Get User's Public Key
-        # CRITICAL: We need to read the public key from DB using the CREDENTIAL ID.
-        # But we don't have a token!
+        # 3. Get User's Public Key from Firestore
+        cred_id = credential.id
+        cred_doc = FirestoreClient.get_doc(f"users/{user_id}/webauthn_credentials", cred_id)
         
-        # DEV MODE BYPASS
-        if config['rp_id'] == "localhost":
-            print("WARNING: Bypassing WebAuthn Signature Verification for Localhost Development.", file=sys.stderr)
-            # We assume valid if structured correctly because we can't verify signature without public key
-            return {
-                'verified': True,
-                'token': f"mock_token_for_{user_id}" 
-            }
+        if not cred_doc or 'public_key' not in cred_doc:
+            raise ValueError("Credential not registered for this user")
+            
+        public_key = base64url_to_bytes(cred_doc['public_key'])
+        current_sign_count = cred_doc.get('sign_count', 0)
 
-        raise Exception("Backend is missing Admin Privileges to fetch public key for verification. Please re-enable Firebase Admin SDK or implement a privileged proxy.")
+        # 4. Verify
+        verification = verify_authentication_response(
+            credential=credential,
+            expected_challenge=expected_challenge,
+            expected_rp_id=config['rp_id'],
+            expected_origin=config['origin'],
+            credential_public_key=public_key,
+            credential_current_sign_count=current_sign_count,
+            require_user_verification=True,
+        )
+        
+        # 5. Update Sign Count
+        FirestoreClient.update_doc(f"users/{user_id}/webauthn_credentials", cred_id, {
+            "sign_count": verification.new_sign_count
+        })
+
+        return {
+            'verified': True,
+            'new_sign_count': verification.new_sign_count
+        }
         
