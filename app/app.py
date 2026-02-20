@@ -52,9 +52,10 @@ def create_app(config_class=Config):
     app.register_blueprint(vault_bp, url_prefix='/api/vault')
     app.register_blueprint(auth_bp, url_prefix='/api/auth')
 
+    @app.route('/health')
     @app.route('/api/health')
     def health_check():
-        return {'status': 'healthy'}, 200
+        return {'status': 'ok'}, 200
 
     return app
 
