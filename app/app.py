@@ -38,6 +38,38 @@ def create_app(config_class=Config):
         default_limits_exempt_when=lambda: app.request.method == 'OPTIONS'
     )
 
+    # GLOBAL OPTIONS HANDLER (The "Nuclear" Fix)
+    # This must run before all other requests to ensure preflight always succeeds
+    @app.before_request
+    def handle_preflight():
+        from flask import request, make_response
+        if request.method == "OPTIONS":
+            response = make_response()
+            
+            # Dynamic Origin Logic
+            origin = request.headers.get('Origin')
+            if origin:
+                import re
+                allowed_patterns = [
+                    app.config['ORIGIN'],  # Main production origin
+                    r"^https://cipherlock-.*\.vercel\.app$",  # Vercel preview deployments
+                    r"^http://localhost:\d+$"  # Local development
+                ]
+                
+                allow = False
+                for pattern in allowed_patterns:
+                    if pattern and (origin == pattern or re.match(pattern, origin)):
+                        allow = True
+                        break
+                
+                if allow:
+                    response.headers.add('Access-Control-Allow-Origin', origin)
+                    response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
+                    response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
+                    response.headers.add('Access-Control-Allow-Credentials', 'true')
+            
+            return response
+
     # HTTP Security Headers
     # Force HTTPS in production (when not debugging)
     force_https = not app.debug
