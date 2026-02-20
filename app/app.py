@@ -40,6 +40,8 @@ def create_app(config_class=Config):
 
     # GLOBAL OPTIONS HANDLER (The "Nuclear" Fix)
     # This must run before all other requests to ensure preflight always succeeds
+    # GLOBAL OPTIONS HANDLER (The "Nuclear" Fix)
+    # This must run before all other requests to ensure preflight always succeeds
     @app.before_request
     def handle_preflight():
         from flask import request, make_response
@@ -64,10 +66,12 @@ def create_app(config_class=Config):
                 
                 if allow:
                     response.headers.add('Access-Control-Allow-Origin', origin)
-                    response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
+                    response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization,X-Requested-With,Accept,Origin')
                     response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
                     response.headers.add('Access-Control-Allow-Credentials', 'true')
             
+            # Key modification: Force 200 OK
+            response.status_code = 200
             return response
 
     # HTTP Security Headers
