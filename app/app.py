@@ -39,9 +39,14 @@ def create_app(config_class=Config):
 
 
     # HTTP Security Headers
-    # Force HTTPS in production (when not debugging)
-    force_https = not app.debug
-    Talisman(app, content_security_policy=None, force_https=force_https)
+    # NOTE: Render handles HTTPS at the proxy level. The Flask app runs on HTTP internally.
+    # Talisman must NOT force HTTPS itself, as that would cause infinite redirect loops.
+    # We rely on Render's infrastructure to enforce HTTPS instead.
+    Talisman(
+        app,
+        content_security_policy=None,
+        force_https=False,  # Render's proxy handles this; enabling causes redirect loops
+    )
 
     # Register Blueprints
     app.register_blueprint(vault_bp, url_prefix='/api/vault')
