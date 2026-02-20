@@ -8,7 +8,7 @@ from datetime import datetime
 def get_user_doc(uid, token):
     url = f"{get_firestore_base_url()}/users/{uid}"
     headers = {"Authorization": f"Bearer {token}"}
-    response = requests.get(url, headers=headers)
+    response = requests.get(url, headers=headers, timeout=10)
     return response
 
 def update_user_doc(uid, token, fields):
@@ -19,7 +19,7 @@ def update_user_doc(uid, token, fields):
     data = {"fields": fields}
     
     # We use PATCH to update specific fields
-    response = requests.patch(url, json=data, headers=headers)
+    response = requests.patch(url, json=data, headers=headers, timeout=10)
     return response
 
 def generate_2fa_secret():

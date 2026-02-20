@@ -16,7 +16,7 @@ def verify_firebase_token(f):
             # Verify token using Google Identity Toolkit REST API
             # This avoids needing the Admin SDK and Private Key
             url = get_google_auth_url()
-            response = requests.post(url, json={'idToken': token})
+            response = requests.post(url, json={'idToken': token}, timeout=10)
             
             if response.status_code != 200:
                 return jsonify({'error': 'Invalid or expired token'}), 401
