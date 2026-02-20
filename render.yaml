@@ -6,7 +6,7 @@ services:
     startCommand: gunicorn app.app:app
     envVars:
       - key: PYTHON_VERSION
-        value: 3.9.0
+        value: 3.11.9
       - key: FLASK_SECRET_KEY
         generateValue: true
       - key: FIREBASE_PROJECT_ID
